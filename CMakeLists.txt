@@ -32,6 +32,10 @@ message(STATUS "PCAN lib:     ${PCAN_LIB}")
 # =============================================================================
 # mip_sdk (Step-4 IMU)
 #
+# NOTE: 2026-07 기준 HBK-MicroStrain/mip_sdk (LORD-MicroStrain은 레거시)로 이전됨.
+#       헤더가 include/microstrain/cpp/mip/ 밑으로 이동했고,
+#       라이브러리가 libmip.a / libmicrostrain.a / libmicrostrain_serial.a 로 분리됨.
+#
 # NUC에서 빌드 방법:
 #   cd mip_sdk && mkdir build && cd build
 #   cmake .. -DCMAKE_INSTALL_PREFIX=/opt/mip_sdk
@@ -42,18 +46,29 @@ message(STATUS "PCAN lib:     ${PCAN_LIB}")
 if(DEFINED MIP_SDK_ROOT)
     find_path(MIP_INCLUDE_DIR
         NAMES mip/mip_interface.hpp
-        PATHS "${MIP_SDK_ROOT}/include" "${MIP_SDK_ROOT}/src/cpp"
+        PATHS "${MIP_SDK_ROOT}/include/microstrain/cpp"
         NO_DEFAULT_PATH
     )
     find_library(MIP_LIB
-        NAMES mip microstrain_inertial_mip
-        PATHS "${MIP_SDK_ROOT}/lib" "${MIP_SDK_ROOT}/build/src/cpp"
+        NAMES mip
+        PATHS "${MIP_SDK_ROOT}/lib"
         NO_DEFAULT_PATH
     )
-    if(MIP_INCLUDE_DIR AND MIP_LIB)
+    find_library(MICROSTRAIN_LIB
+        NAMES microstrain
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+    find_library(MICROSTRAIN_SERIAL_LIB
+        NAMES microstrain_serial
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+    if(MIP_INCLUDE_DIR AND MIP_LIB AND MICROSTRAIN_LIB AND MICROSTRAIN_SERIAL_LIB)
         set(MIP_SDK_FOUND TRUE)
+        set(MIP_LIBS ${MIP_LIB} ${MICROSTRAIN_LIB} ${MICROSTRAIN_SERIAL_LIB})
         message(STATUS "mip_sdk include: ${MIP_INCLUDE_DIR}")
-        message(STATUS "mip_sdk lib:     ${MIP_LIB}")
+        message(STATUS "mip_sdk libs:     ${MIP_LIBS}")
     else()
         message(WARNING "MIP_SDK_ROOT 지정됐지만 헤더/라이브러리를 찾지 못함. IMU 빌드 제외.")
     endif()
@@ -91,7 +106,7 @@ if(MIP_SDK_FOUND)
         src/imu_driver.cpp
     )
     target_include_directories(qub_imu PUBLIC include ${MIP_INCLUDE_DIR})
-    target_link_libraries(qub_imu PUBLIC ${MIP_LIB} pthread rt)
+    target_link_libraries(qub_imu PUBLIC ${MIP_LIBS} pthread rt)
 endif()
 
 # =============================================================================
