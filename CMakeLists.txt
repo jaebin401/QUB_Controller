@@ -59,8 +59,23 @@ if(DEFINED MIP_SDK_ROOT)
         PATHS "${MIP_SDK_ROOT}/lib"
         NO_DEFAULT_PATH
     )
+    find_library(MIP_EXTRAS_LIB
+        NAMES mip_extras
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+    find_library(MIP_METADATA_LIB
+        NAMES mip_metadata
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
     find_library(MICROSTRAIN_LIB
         NAMES microstrain
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+    find_library(MICROSTRAIN_EXTRAS_LIB
+        NAMES microstrain_extras
         PATHS "${MIP_SDK_ROOT}/lib"
         NO_DEFAULT_PATH
     )
@@ -69,12 +84,29 @@ if(DEFINED MIP_SDK_ROOT)
         PATHS "${MIP_SDK_ROOT}/lib"
         NO_DEFAULT_PATH
     )
+    find_library(MICROSTRAIN_SOCKET_LIB
+        NAMES microstrain_socket
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
+    find_library(MICROSTRAIN_RECORDING_LIB
+        NAMES microstrain_recording_connection
+        PATHS "${MIP_SDK_ROOT}/lib"
+        NO_DEFAULT_PATH
+    )
     if(MIP_INCLUDE_DIR AND MIP_C_INCLUDE_DIR AND MIP_LIB AND MICROSTRAIN_LIB AND MICROSTRAIN_SERIAL_LIB)
         set(MIP_SDK_FOUND TRUE)
-        set(MIP_LIBS ${MIP_LIB} ${MICROSTRAIN_LIB} ${MICROSTRAIN_SERIAL_LIB})
+        # 순환 의존성(mip <-> microstrain <-> microstrain_serial 등) 해결을 위해
+        # --start-group/--end-group으로 묶어 링커가 반복 탐색하게 함.
+        # (2026-07-04 현장에서 /opt/mip_sdk/lib 확인 결과 8개 라이브러리 모두 존재 확인됨)
+        set(MIP_LIBS_RAW ${MIP_LIB} ${MIP_EXTRAS_LIB} ${MIP_METADATA_LIB}
+                         ${MICROSTRAIN_LIB} ${MICROSTRAIN_EXTRAS_LIB}
+                         ${MICROSTRAIN_SERIAL_LIB} ${MICROSTRAIN_SOCKET_LIB}
+                         ${MICROSTRAIN_RECORDING_LIB})
+        set(MIP_LIBS -Wl,--start-group ${MIP_LIBS_RAW} -Wl,--end-group)
         set(MIP_INCLUDE_DIRS ${MIP_INCLUDE_DIR} ${MIP_C_INCLUDE_DIR})
         message(STATUS "mip_sdk include: ${MIP_INCLUDE_DIRS}")
-        message(STATUS "mip_sdk libs:     ${MIP_LIBS}")
+        message(STATUS "mip_sdk libs:     ${MIP_LIBS_RAW}")
     else()
         message(WARNING "MIP_SDK_ROOT 지정됐지만 헤더/라이브러리를 찾지 못함. IMU 빌드 제외.")
     endif()
