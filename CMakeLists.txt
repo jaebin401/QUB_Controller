@@ -144,6 +144,11 @@ if(MIP_SDK_FOUND)
         src/imu_driver.cpp
     )
     target_include_directories(qub_imu PUBLIC include ${MIP_INCLUDE_DIRS})
+    # mip_sdk(libmip.a 등)가 MICROSTRAIN_USE_STD_ENDIAN 정의된 상태로 빌드되어 Endian = std::endian을
+    # 쓰는데, 이 매크로가 없으면 자체 enum class Endian으로 달라져 extract() 심볼이 맵글링되어
+    # undefined reference가 난다 (readwrite.hpp 참고, 2026-07-04 현장에서 확인).
+    # 따라서 동일하게 정의해야 함.
+    target_compile_definitions(qub_imu PUBLIC MICROSTRAIN_USE_STD_ENDIAN)
     target_link_libraries(qub_imu PUBLIC ${MIP_LIBS} pthread rt)
 endif()
 
