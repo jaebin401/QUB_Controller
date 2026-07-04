@@ -6,6 +6,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstring>
 #include <cstdint>
 #include <exception>
 #include <cstdio>
@@ -20,7 +21,11 @@ namespace {
 constexpr uint8_t PROBE_HOST_ID = robstride::HOST_ID_DEFAULT;
 constexpr int PROBE_TIMEOUT_MS = 20;
 constexpr int PROBE_RETRIES = 2;
-constexpr std::array<uint16_t, 2> PROBE_PARAMS = {
+constexpr int SCAN_ID_MIN = 0;
+constexpr int SCAN_ID_MAX = 15;
+constexpr int GET_ID_SCAN_TIMEOUT_MS = 5;
+constexpr std::array<uint16_t, 3> PROBE_PARAMS = {
+    robstride::PARAM_CAN_ID,
     robstride::PARAM_RUN_MODE,
     robstride::PARAM_MECH_POS,
 };
@@ -33,6 +38,17 @@ struct ProbeResult {
     const char* stage             = "none";
     TPCANStatus last_status       = PCAN_ERROR_OK;
     TPCANMsg    response_msg      = {};
+    bool        current_id_valid  = false;
+    uint8_t     current_id        = 0;
+    bool        queried_id_mismatch = false;
+};
+
+struct GetIdHit {
+    uint8_t requested_id = 0;
+    uint8_t reported_id  = 0;
+    uint16_t extra_data  = 0;
+    uint8_t check_byte   = 0;
+    TPCANMsg response_msg = {};
 };
 
 uint32_t build_ext_id(uint8_t comm_type, uint16_t data_field, uint8_t motor_id)
@@ -101,6 +117,38 @@ bool is_reply_for_motor(const TPCANMsg& msg, uint8_t motor_id)
     return (dst_host == PROBE_HOST_ID) && (src_motor == motor_id);
 }
 
+bool is_get_id_reply(const TPCANMsg& msg)
+{
+    if ((msg.MSGTYPE & PCAN_MESSAGE_EXTENDED) == 0)
+        return false;
+    return static_cast<uint8_t>((msg.ID >> 24) & 0x1F) == robstride::COMM_GET_ID;
+}
+
+void capture_current_id_from_param_response(const TPCANMsg& msg, ProbeResult& result)
+{
+    if (((msg.MSGTYPE & PCAN_MESSAGE_EXTENDED) == 0) || msg.LEN < 8)
+        return;
+
+    const uint8_t comm_type = static_cast<uint8_t>((msg.ID >> 24) & 0x1F);
+    if (comm_type != robstride::COMM_PARAM_READ)
+        return;
+
+    const uint16_t param_idx = static_cast<uint16_t>(msg.DATA[0]) |
+                               (static_cast<uint16_t>(msg.DATA[1]) << 8);
+    if (param_idx != robstride::PARAM_CAN_ID)
+        return;
+
+    float can_id_f32 = 0.f;
+    std::memcpy(&can_id_f32, &msg.DATA[4], sizeof(float));
+
+    if (can_id_f32 < 0.f || can_id_f32 > 255.f)
+        return;
+
+    const uint8_t can_id = static_cast<uint8_t>(can_id_f32 + 0.5f);
+    result.current_id_valid = true;
+    result.current_id = can_id;
+}
+
 bool wait_for_reply(PcanChannel& ch,
                     uint8_t motor_id,
                     std::chrono::milliseconds timeout,
@@ -117,6 +165,7 @@ bool wait_for_reply(PcanChannel& ch,
                 result.responded = true;
                 result.response_msg = msg;
                 result.last_status = PCAN_ERROR_OK;
+                capture_current_id_from_param_response(msg, result);
                 return true;
             }
             sts = ch.read(msg);
@@ -124,6 +173,33 @@ bool wait_for_reply(PcanChannel& ch,
 
         if (sts != PCAN_ERROR_QRCVEMPTY) {
             result.last_status = sts;
+        }
+
+        std::this_thread::sleep_for(std::chrono::microseconds(500));
+    }
+
+    return false;
+}
+
+bool wait_for_get_id_reply(PcanChannel& ch,
+                           std::chrono::milliseconds timeout,
+                           GetIdHit& hit)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (std::chrono::steady_clock::now() < deadline) {
+        TPCANMsg msg{};
+        TPCANStatus sts = ch.read(msg);
+
+        while (sts == PCAN_ERROR_OK) {
+            if (is_get_id_reply(msg)) {
+                hit.response_msg = msg;
+                hit.extra_data = static_cast<uint16_t>((msg.ID >> 8) & 0xFFFF);
+                hit.reported_id = static_cast<uint8_t>(hit.extra_data & 0xFF);
+                hit.check_byte = static_cast<uint8_t>(msg.ID & 0xFF);
+                return true;
+            }
+            sts = ch.read(msg);
         }
 
         std::this_thread::sleep_for(std::chrono::microseconds(500));
@@ -158,15 +234,21 @@ ProbeResult probe_motor(PcanChannel& ch, uint8_t motor_id)
             sts = send_param_read(ch, motor_id, param_idx);
             result.last_status = sts;
             result.tx_ok = (sts == PCAN_ERROR_OK);
-            result.stage = (param_idx == robstride::PARAM_RUN_MODE)
-                ? "PARAM_READ(run_mode)"
-                : "PARAM_READ(mech_pos)";
+            if (param_idx == robstride::PARAM_CAN_ID) {
+                result.stage = "PARAM_READ(can_id)";
+            } else if (param_idx == robstride::PARAM_RUN_MODE) {
+                result.stage = "PARAM_READ(run_mode)";
+            } else {
+                result.stage = "PARAM_READ(mech_pos)";
+            }
 
             if (!result.tx_ok)
                 break;
 
             if (wait_for_reply(ch, motor_id,
                                std::chrono::milliseconds(PROBE_TIMEOUT_MS), result)) {
+                if (result.current_id_valid)
+                    result.queried_id_mismatch = (result.current_id != motor_id);
                 return result;
             }
         }
@@ -201,7 +283,46 @@ void print_result(const MotorMapEntry& entry, const ProbeResult& result)
     const uint8_t comm_type = static_cast<uint8_t>((result.response_msg.ID >> 24) & 0x1F);
     std::printf("OK attempt=%d via=%s reply=%s ",
                 result.attempt, result.stage, comm_type_to_string(comm_type));
+    if (result.current_id_valid) {
+        std::printf("current_id=%u", result.current_id);
+        if (result.queried_id_mismatch)
+            std::printf("(EXPECTED_%u_MISMATCH)", entry.motor_id);
+        std::printf(" ");
+    }
     print_frame(result.response_msg);
+    std::printf("\n");
+}
+
+void scan_channel_ids(PcanChannel& ch, int channel_idx)
+{
+    std::printf("  can%d scan:", channel_idx);
+
+    bool any = false;
+    for (int requested_id = SCAN_ID_MIN; requested_id <= SCAN_ID_MAX; ++requested_id) {
+        drain_rx_queue(ch);
+
+        if (send_get_id(ch, static_cast<uint8_t>(requested_id)) != PCAN_ERROR_OK)
+            continue;
+
+        GetIdHit hit;
+        hit.requested_id = static_cast<uint8_t>(requested_id);
+        if (!wait_for_get_id_reply(ch,
+                                   std::chrono::milliseconds(GET_ID_SCAN_TIMEOUT_MS),
+                                   hit)) {
+            continue;
+        }
+
+        any = true;
+        std::printf(" [req=%d -> current=%u check=0x%02X uuid=",
+                    requested_id, hit.reported_id, hit.check_byte);
+        for (int i = 0; i < hit.response_msg.LEN; ++i)
+            std::printf("%02X", hit.response_msg.DATA[i]);
+        std::printf("]");
+    }
+
+    if (!any)
+        std::printf(" no GET_ID replies in range %d..%d", SCAN_ID_MIN, SCAN_ID_MAX);
+
     std::printf("\n");
 }
 
@@ -253,7 +374,17 @@ int main()
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 
-    std::printf("\n[3] 요약\n");
+    std::printf("\n[3] 채널별 현재 CAN ID 스캔 (GET_ID, %d..%d)\n",
+                SCAN_ID_MIN, SCAN_ID_MAX);
+    for (int ch = 0; ch < NUM_CHANNELS; ++ch) {
+        if (!channel_ok[ch]) {
+            std::printf("  can%d scan: CHANNEL_INIT_FAILED\n", ch);
+            continue;
+        }
+        scan_channel_ids(*channels[ch], ch);
+    }
+
+    std::printf("\n[4] 요약\n");
     std::printf("  응답 확인: %d / %d\n", ok_count, NUM_JOINTS);
     std::printf("  미응답    : %d / %d\n", fail_count, NUM_JOINTS);
 

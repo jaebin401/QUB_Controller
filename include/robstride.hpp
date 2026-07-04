@@ -46,6 +46,8 @@ enum RunMode : uint8_t {
 
 // 자주 쓰는 파라미터 인덱스 (매뉴얼 4.1.14)
 enum ParamIdx : uint16_t {
+    PARAM_CAN_ID       = 0x200A,
+    PARAM_CAN_MASTER   = 0x200B,
     PARAM_RUN_MODE     = 0x7005,
     PARAM_IQ_REF       = 0x7006,
     PARAM_SPD_REF      = 0x700A,
