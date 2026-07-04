@@ -49,6 +49,11 @@ if(DEFINED MIP_SDK_ROOT)
         PATHS "${MIP_SDK_ROOT}/include/microstrain/cpp"
         NO_DEFAULT_PATH
     )
+    find_path(MIP_C_INCLUDE_DIR
+        NAMES mip/mip_cmdqueue.h
+        PATHS "${MIP_SDK_ROOT}/include/microstrain/c"
+        NO_DEFAULT_PATH
+    )
     find_library(MIP_LIB
         NAMES mip
         PATHS "${MIP_SDK_ROOT}/lib"
@@ -64,10 +69,11 @@ if(DEFINED MIP_SDK_ROOT)
         PATHS "${MIP_SDK_ROOT}/lib"
         NO_DEFAULT_PATH
     )
-    if(MIP_INCLUDE_DIR AND MIP_LIB AND MICROSTRAIN_LIB AND MICROSTRAIN_SERIAL_LIB)
+    if(MIP_INCLUDE_DIR AND MIP_C_INCLUDE_DIR AND MIP_LIB AND MICROSTRAIN_LIB AND MICROSTRAIN_SERIAL_LIB)
         set(MIP_SDK_FOUND TRUE)
         set(MIP_LIBS ${MIP_LIB} ${MICROSTRAIN_LIB} ${MICROSTRAIN_SERIAL_LIB})
-        message(STATUS "mip_sdk include: ${MIP_INCLUDE_DIR}")
+        set(MIP_INCLUDE_DIRS ${MIP_INCLUDE_DIR} ${MIP_C_INCLUDE_DIR})
+        message(STATUS "mip_sdk include: ${MIP_INCLUDE_DIRS}")
         message(STATUS "mip_sdk libs:     ${MIP_LIBS}")
     else()
         message(WARNING "MIP_SDK_ROOT 지정됐지만 헤더/라이브러리를 찾지 못함. IMU 빌드 제외.")
@@ -105,7 +111,7 @@ if(MIP_SDK_FOUND)
     add_library(qub_imu STATIC
         src/imu_driver.cpp
     )
-    target_include_directories(qub_imu PUBLIC include ${MIP_INCLUDE_DIR})
+    target_include_directories(qub_imu PUBLIC include ${MIP_INCLUDE_DIRS})
     target_link_libraries(qub_imu PUBLIC ${MIP_LIBS} pthread rt)
 endif()
 
