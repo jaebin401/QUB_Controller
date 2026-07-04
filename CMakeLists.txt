@@ -160,6 +160,10 @@ endif()
 add_executable(test_can_init apps/test_can_init.cpp)
 target_link_libraries(test_can_init PRIVATE qub_hw)
 
+# 배선/채널 연결 확인용 안전 프로브 (non-actuating)
+add_executable(test_connection apps/test_connection.cpp)
+target_link_libraries(test_connection PRIVATE qub_hw)
+
 # Step-2: 1채널 RT 모터 스레드
 add_executable(test_rt_thread apps/test_rt_thread.cpp)
 target_link_libraries(test_rt_thread PRIVATE qub_hw)
