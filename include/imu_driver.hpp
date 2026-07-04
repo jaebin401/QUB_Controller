@@ -13,7 +13,9 @@
 //   - mip_sdk/src/cpp/mip/mip_interface.hpp
 //     → Interface::update(Timeout, bool from_cmd) 시그니처
 //   - mip_sdk/src/cpp/mip/definitions/data_filter.hpp
-//     → AttitudeQuaternion, CompensatedAngularRate, CompensatedAcceleration 구조체
+//     → AttitudeQuaternion, CompAngularRate, CompAccel 구조체
+//     (HBK-MicroStrain 신버전 기준 이름. 구버전/문서상 CompensatedAngularRate,
+//      CompensatedAcceleration으로 표기된 경우가 있으나 실제 심볼은 위 이름)
 //
 // 설계 원칙:
 //   - motor_thread 와 같은 패턴: 생성 → configure() → start() → (루프) → stop()
@@ -133,8 +135,8 @@ private:
     // 참고: mip/definitions/data_filter.hpp의 구조체들
     // -------------------------------------------------------------------------
     mip::data_filter::AttitudeQuaternion     quat_{};    // q[0..3] = (w,x,y,z)
-    mip::data_filter::CompensatedAngularRate gyro_{};    // x,y,z [rad/s]
-    mip::data_filter::CompensatedAcceleration accel_{};  // x,y,z [m/s^2]
+    mip::data_filter::CompAngularRate        gyro_{};    // x,y,z [rad/s]
+    mip::data_filter::CompAccel              accel_{};  // x,y,z [m/s^2]
     mip::data_filter::Status                 status_{};  // filter_state (AHRS 여부 판단)
 
     // DispatchHandler: registerExtractor() 의 결과물.

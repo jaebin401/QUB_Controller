@@ -264,10 +264,10 @@ bool ImuDriver::configure_filter_stream()
     //   DATA_COMPENSATED_ACCELERATION (0x1C) — 보정된 선형 가속도
     //   DATA_FILTER_STATUS            (0x10) — 필터 상태 (AHRS 여부 판단용)
     const mip::DescriptorRate descriptors[] = {
-        {mip::data_filter::AttitudeQuaternion::FIELD_DESCRIPTOR,      decimation},
-        {mip::data_filter::CompensatedAngularRate::FIELD_DESCRIPTOR,  decimation},
-        {mip::data_filter::CompensatedAcceleration::FIELD_DESCRIPTOR, decimation},
-        {mip::data_filter::Status::FIELD_DESCRIPTOR,                  decimation},
+        {mip::data_filter::AttitudeQuaternion::FIELD_DESCRIPTOR, decimation},
+        {mip::data_filter::CompAngularRate::FIELD_DESCRIPTOR,    decimation},
+        {mip::data_filter::CompAccel::FIELD_DESCRIPTOR,          decimation},
+        {mip::data_filter::Status::FIELD_DESCRIPTOR,             decimation},
     };
     constexpr int NUM_DESC = sizeof(descriptors) / sizeof(descriptors[0]);
 
