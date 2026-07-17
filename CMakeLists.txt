@@ -164,6 +164,10 @@ target_link_libraries(test_can_init PRIVATE qub_hw)
 add_executable(test_connection apps/test_connection.cpp)
 target_link_libraries(test_connection PRIVATE qub_hw)
 
+# RobStride ID/영점 정비 CLI (non-RT, PCAN 4채널)
+add_executable(motor_config apps/motor_config.cpp)
+target_link_libraries(motor_config PRIVATE qub_hw ${PCAN_LIB} pthread rt)
+
 # Step-2: 1채널 RT 모터 스레드
 add_executable(test_rt_thread apps/test_rt_thread.cpp)
 target_link_libraries(test_rt_thread PRIVATE qub_hw)
