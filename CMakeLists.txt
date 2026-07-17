@@ -168,6 +168,10 @@ target_link_libraries(test_connection PRIVATE qub_hw)
 add_executable(motor_config apps/motor_config.cpp)
 target_link_libraries(motor_config PRIVATE qub_hw ${PCAN_LIB} pthread rt)
 
+# 자동 스캔 + 위치 모니터 + Space ON/OFF 터미널 GUI
+add_executable(position_read apps/position_read.cpp)
+target_link_libraries(position_read PRIVATE qub_hw ${PCAN_LIB} pthread rt)
+
 # Step-2: 1채널 RT 모터 스레드
 add_executable(test_rt_thread apps/test_rt_thread.cpp)
 target_link_libraries(test_rt_thread PRIVATE qub_hw)
